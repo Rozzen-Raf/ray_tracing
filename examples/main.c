@@ -14,51 +14,7 @@ const size_t step_height = height / parts;
 const int fov = M_PI / 2;
 vec3 *framebuffer;
 
-// Structs
-typedef struct render_thread_args
-{
-    size_t width_part_idx;
-    size_t height_part_idx;
-    sphere *spheres;
-    size_t spheres_len;
-    light *lights;
-    size_t lights_len;
-    const vec3 *orig;
-} render_thread_args;
-
-// Functions
-void render_thread(void *args)
-{
-    render_thread_args *render_args = (render_thread_args *)args;
-
-    size_t begin_width = step_width * render_args->width_part_idx;
-    size_t begin_height = step_height * render_args->height_part_idx;
-
-    size_t end_width = begin_width + step_width;
-    size_t end_height = begin_height + step_height;
-
-    for (size_t height_idx = begin_height; height_idx < end_height; ++height_idx)
-    {
-        for (size_t width_idx = begin_width; width_idx < end_width; ++width_idx)
-        {
-            float x = (2 * (width_idx + 0.5) / (float)width - 1) * tan(fov / 2.) * width / (float)height;
-            float y = -(2 * (height_idx + 0.5) / (float)height - 1) * tan(fov / 2.);
-            vec3 dir_not_normal;
-            dir_not_normal.x = x;
-            dir_not_normal.y = y;
-            dir_not_normal.z = -1;
-            vec3 dir = vector_normalize(dir_not_normal);
-
-            framebuffer[width_idx + height_idx * width] = cast_ray(*render_args->orig, dir, vector_create(0.5f, 0.5f, 0.5f),
-                                                                   render_args->spheres, render_args->spheres_len,
-                                                                   render_args->lights, render_args->lights_len);
-        }
-    }
-
-    free(render_args);
-}
-
-void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *lights, size_t lights_len)
+void render(sphere *spheres, size_t spheres_len, light *lights, size_t lights_len)
 {
     const vec3 camera_pos = vector_create(0.f, 0.f, 0.f);
 
@@ -69,30 +25,23 @@ void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *ligh
         return;
     }
 
-    for (size_t i = 0; i < parts; ++i)
+    for (size_t height_idx = 0; height_idx < height; ++height_idx)
     {
-        for (size_t j = 0; j < parts; ++j)
+        for (size_t width_idx = 0; width_idx < width; ++width_idx)
         {
-            render_thread_args *args = (render_thread_args *)malloc(sizeof(render_thread_args));
-            if (args == NULL)
-            {
-                printf("Error allocate memory for render thread args");
-                return;
-            }
-
-            args->height_part_idx = i;
-            args->width_part_idx = j;
-            args->orig = &camera_pos;
-            args->spheres = spheres;
-            args->spheres_len = spheres_len;
-            args->lights = lights;
-            args->lights_len = lights_len;
-
-            add_task_thread_pool(pool, render_thread, args);
+            float x = (2 * (width_idx + 0.5) / (float)width - 1) * tan(fov / 2.) * width / (float)height;
+            float y = -(2 * (height_idx + 0.5) / (float)height - 1) * tan(fov / 2.);
+            vec3 dir_not_normal;
+            dir_not_normal.x = x;
+            dir_not_normal.y = y;
+            dir_not_normal.z = -1;
+            vec3 dir = vector_normalize(dir_not_normal);
+            framebuffer[width_idx + height_idx * width] = cast_ray(camera_pos, dir, vector_create(0.5f, 0.5f, 0.5f),
+                                                                   spheres, spheres_len,
+                                                                   lights, lights_len);
         }
     }
 
-    wait_thread_pool(pool);
     FILE *out = fopen("out.tga", "w");
     char header[18] = {0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                        (char)(width % 256), (char)(width / 256),
@@ -143,18 +92,10 @@ int main()
     lights[0] = light_create(vector_create(-20, 20, 20), 1.5);
     lights[1] = light_create(vector_create(30, 50, -25), 1.8);
 
-    thread_pool_t pool = create_thread_pool(8);
-    if (pool == NULL)
-    {
-        printf("Error creating thread pool");
-        return 0;
-    }
-
-    render(pool, spheres, 4, lights, 2);
+    render(spheres, 4, lights, 2);
 
     free(spheres);
     free(lights);
-    destroy_thread_pool(pool);
 
     return 0;
 }
