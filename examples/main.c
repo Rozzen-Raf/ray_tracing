@@ -8,9 +8,10 @@
 // Global variables
 const size_t width = 3840;
 const size_t height = 2160;
-const size_t parts = 4;
-const size_t step_width = width / parts;
-const size_t step_height = height / parts;
+const size_t width_parts = 4;
+const size_t height_parts = 2;
+const size_t step_width = width / width_parts;
+const size_t step_height = height / height_parts;
 const int fov = M_PI / 2;
 vec3 *framebuffer;
 
@@ -69,9 +70,9 @@ void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *ligh
         return;
     }
 
-    for (size_t i = 0; i < parts; ++i)
+    for (size_t i = 0; i < width_parts; ++i)
     {
-        for (size_t j = 0; j < parts; ++j)
+        for (size_t j = 0; j < height_parts; ++j)
         {
             render_thread_args *args = (render_thread_args *)malloc(sizeof(render_thread_args));
             if (args == NULL)
@@ -80,8 +81,8 @@ void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *ligh
                 return;
             }
 
-            args->height_part_idx = i;
-            args->width_part_idx = j;
+            args->width_part_idx = i;
+            args->height_part_idx = j;
             args->orig = &camera_pos;
             args->spheres = spheres;
             args->spheres_len = spheres_len;
