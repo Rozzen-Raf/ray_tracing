@@ -5,15 +5,16 @@
 #include "stdlib.h"
 #include "float.h"
 #include "thread_pool.h"
+#include "pthread.h"
 // Global variables
 const size_t width = 3840;
 const size_t height = 2160;
-const size_t parts = 4;
-const size_t step_width = width / parts;
-const size_t step_height = height / parts;
+const size_t width_parts = 4;
+const size_t height_parts = 2;
+const size_t step_width = width / width_parts;
+const size_t step_height = height / height_parts;
 const int fov = M_PI / 2;
 vec3 *framebuffer;
-
 // Structs
 typedef struct render_thread_args
 {
@@ -58,9 +59,10 @@ void render_thread(void *args)
     free(render_args);
 }
 
-void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *lights, size_t lights_len)
+void render(sphere *spheres, size_t spheres_len, light *lights, size_t lights_len)
 {
     const vec3 camera_pos = vector_create(0.f, 0.f, 0.f);
+    pthread_t threads[width_parts * height_parts];
 
     framebuffer = (vec3 *)malloc(width * height * sizeof(vec3));
     if (framebuffer == NULL)
@@ -69,9 +71,9 @@ void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *ligh
         return;
     }
 
-    for (size_t i = 0; i < parts; ++i)
+    for (size_t i = 0; i < width_parts; ++i)
     {
-        for (size_t j = 0; j < parts; ++j)
+        for (size_t j = 0; j < height_parts; ++j)
         {
             render_thread_args *args = (render_thread_args *)malloc(sizeof(render_thread_args));
             if (args == NULL)
@@ -79,20 +81,23 @@ void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *ligh
                 printf("Error allocate memory for render thread args");
                 return;
             }
-
-            args->height_part_idx = i;
-            args->width_part_idx = j;
+            args->width_part_idx = i;
+            args->height_part_idx = j;
             args->orig = &camera_pos;
             args->spheres = spheres;
             args->spheres_len = spheres_len;
             args->lights = lights;
             args->lights_len = lights_len;
 
-            add_task_thread_pool(pool, render_thread, args);
+            pthread_create(&threads[i + j * height_parts], NULL, (void *(*)(void *))render_thread, args);
         }
     }
 
-    wait_thread_pool(pool);
+    for (size_t i = 0; i < width_parts * height_parts; ++i)
+    {
+        pthread_join(threads[i], NULL);
+    }
+
     FILE *out = fopen("out.tga", "w");
     char header[18] = {0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0,
                        (char)(width % 256), (char)(width / 256),
@@ -143,18 +148,10 @@ int main()
     lights[0] = light_create(vector_create(-20, 20, 20), 1.5);
     lights[1] = light_create(vector_create(30, 50, -25), 1.8);
 
-    thread_pool_t pool = create_thread_pool(8);
-    if (pool == NULL)
-    {
-        printf("Error creating thread pool");
-        return 0;
-    }
-
-    render(pool, spheres, 4, lights, 2);
+    render(spheres, 4, lights, 2);
 
     free(spheres);
     free(lights);
-    destroy_thread_pool(pool);
 
     return 0;
 }
