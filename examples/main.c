@@ -32,6 +32,8 @@ void render_thread(void *args)
 {
     render_thread_args *render_args = (render_thread_args *)args;
 
+    size_t depth = 0;
+
     size_t begin_width = step_width * render_args->width_part_idx;
     size_t begin_height = step_height * render_args->height_part_idx;
 
@@ -50,9 +52,13 @@ void render_thread(void *args)
             dir_not_normal.z = -1;
             vec3 dir = vector_normalize(dir_not_normal);
 
-            framebuffer[width_idx + height_idx * width] = cast_ray(*render_args->orig, dir, vector_create(0.5f, 0.5f, 0.5f),
-                                                                   render_args->spheres, render_args->spheres_len,
-                                                                   render_args->lights, render_args->lights_len);
+            framebuffer[width_idx + height_idx * width] =
+                cast_ray(
+                    *render_args->orig,
+                    dir,
+                    vector_create(0.5f, 0.5f, 0.5f),
+                    render_args->spheres, render_args->spheres_len,
+                    render_args->lights, render_args->lights_len, depth);
         }
     }
 
@@ -121,18 +127,20 @@ void render(thread_pool_t pool, sphere *spheres, size_t spheres_len, light *ligh
 
 int main()
 {
-    material green = material_create(vector_create(0.f, 0.5f, 0.f), vector2_create(0.6f, 0.3f), 50.);
-    material white = material_create(vector_create(1.f, 1.f, 1.f), vector2_create(0.6f, 0.6f), 20.);
+    material green = material_create(vector_create(0.f, 0.5f, 0.f), vector_create(0.6f, 0.3f, 0.1f), 50.);
+    material white = material_create(vector_create(1.f, 1.f, 1.f), vector_create(0.6f, 0.6f, 0.f), 20.);
+    material mirror = material_create(vector_create(1.f, 1.f, 1.f), vector_create(0.0f, 10.f, 0.8f), 1425.);
 
-    sphere *spheres = (sphere *)malloc(3 * sizeof(sphere));
+    sphere *spheres = (sphere *)malloc(4 * sizeof(sphere));
     if (spheres == NULL)
     {
         printf("Error allocate memory for spheres");
         return 0;
     }
-    spheres[0] = sphere_create(vector_create(-5.f, -1.f, -12.f), 2.f, white);
+    spheres[0] = sphere_create(vector_create(-5.f, -1.f, -12.f), 2.f, mirror);
     spheres[1] = sphere_create(vector_create(1.5f, -0.5f, -18.f), 2.f, white);
-    spheres[2] = sphere_create(vector_create(7.f, 5.f, -18.f), 2.f, green);
+    spheres[2] = sphere_create(vector_create(7.f, 5.f, -18.f), 2.f, mirror);
+    spheres[3] = sphere_create(vector_create(-6.f, 3.f, -10.f), 3.f, green);
 
     light *lights = (light *)malloc(2 * sizeof(light));
     if (lights == NULL)

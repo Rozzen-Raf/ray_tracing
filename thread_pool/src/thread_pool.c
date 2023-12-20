@@ -59,6 +59,7 @@ typedef struct thread_pool
     task_queue queue;
 
     volatile size_t count_th_alive;
+    volatile size_t count_th_working;
 
     volatile int stop;
 } thread_pool;
@@ -100,6 +101,7 @@ thread_pool_t create_thread_pool(size_t thread_count)
     }
 
     th_pool->count_th_alive = 0;
+    th_pool->count_th_working = 0;
     th_pool->stop = 0;
 
     if (task_queue_init(&th_pool->queue) == -1)
@@ -148,7 +150,7 @@ int add_task_thread_pool(thread_pool_t th_pool, void (*function_p)(void *), void
 void wait_thread_pool(thread_pool_t th_pool)
 {
     pthread_mutex_lock(&th_pool->th_count_mtx);
-    while (th_pool->queue.size)
+    while (th_pool->queue.size || th_pool->count_th_working)
     {
         pthread_cond_wait(&th_pool->thread_end_wait, &th_pool->th_count_mtx);
     }
@@ -312,7 +314,11 @@ static void thread_exec(thread *thr)
 
         // cppcheck-suppress oppositeInnerCondition
         if (pool->stop)
-            continue;
+            break;
+
+        pthread_mutex_lock(&pool->th_count_mtx);
+        pool->count_th_working++;
+        pthread_mutex_unlock(&pool->th_count_mtx);
 
         void (*func)(void *);
 
@@ -325,10 +331,11 @@ static void thread_exec(thread *thr)
             free(task_p);
         }
 
-        if (!pool->queue.size)
-        {
+        pthread_mutex_lock(&pool->th_count_mtx);
+        pool->count_th_working--;
+        if (!pool->count_th_working)
             pthread_cond_signal(&pool->thread_end_wait);
-        }
+        pthread_mutex_unlock(&pool->th_count_mtx);
     }
 
     pthread_mutex_lock(&pool->th_count_mtx);
